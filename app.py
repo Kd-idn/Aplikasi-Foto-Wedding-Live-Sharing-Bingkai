@@ -1,5 +1,5 @@
 import streamlit as st
-from PIL import Image
+from PIL import Image, ImageOps
 import io
 
 st.set_page_config(page_title="Wedding Gallery", layout="wide")
@@ -29,43 +29,45 @@ if uploaded_photo:
     if st.session_state.frame is None:
         st.error("Gagal: Upload bingkai dulu di Admin Panel (samping kiri)!")
     else:
-        with st.spinner("Memasang bingkai..."):
+        with st.spinner("Sedang memproses foto..."):
             # 1. Buka foto kamera dan bingkai
-            user_img = Image.open(uploaded_photo).convert("RGBA")
+            user_img = Image.open(uploaded_photo)
+            
+            # Perbaiki rotasi otomatis jika foto diambil vertikal (EXIF)
+            user_img = ImageOps.exif_transpose(user_img).convert("RGBA")
+            
             frame_img = st.session_state.frame
             
-            # 2. Resize foto kamera agar SAMA PERSIS dengan ukuran bingkai
-            user_img_resized = user_img.resize(frame_img.size, Image.Resampling.LANCZOS)
+            # 2. Resize foto kamera agar menutupi seluruh area bingkai (Fit & Crop)
+            # Ini memastikan foto tidak gepeng
+            user_img_resized = ImageOps.fit(user_img, frame_img.size, method=Image.Resampling.LANCZOS)
             
-            # 3. Gabungkan: Foto di bawah, Bingkai di atas
-            # Kita buat kanvas kosong seukuran bingkai
-            combined = Image.new("RGBA", frame_img.size)
-            combined.paste(user_img_resized, (0, 0))
-            combined.paste(frame_img, (0, 0), mask=frame_img)
+            # 3. Gabungkan secara fisik (Alpha Composite)
+            # Foto di bawah, Bingkai di atas
+            final_image = Image.alpha_composite(user_img_resized, frame_img)
             
-            # 4. Simpan ke daftar galeri (paling atas adalah yang terbaru)
-            st.session_state.gallery.insert(0, combined.convert("RGB"))
-            st.success("Foto berhasil masuk galeri!")
+            # 4. Simpan ke daftar galeri (Konversi ke RGB untuk hemat memori)
+            st.session_state.gallery.insert(0, final_image.convert("RGB"))
+            st.success("Foto berhasil diproses!")
 
 # --- TAMPILAN GALERI ---
 st.write("---")
-st.write("### 🖼️ Galeri Tamu (Scan QR untuk Download)")
+st.write("### 🖼️ Galeri Tamu (Klik Download untuk Simpan)")
 
 if st.session_state.gallery:
-    # Buat grid 3 kolom
     cols = st.columns(3)
     for idx, photo in enumerate(st.session_state.gallery):
         with cols[idx % 3]:
+            # Tampilkan gambar
             st.image(photo, use_container_width=True)
-            # Tombol Download
+            
+            # Siapkan tombol download
             buf = io.BytesIO()
-            photo.save(buf, format="JPEG")
+            photo.save(buf, format="JPEG", quality=85) # Quality 85 untuk hemat storage
             st.download_button(
                 label=f"📥 Download Foto {len(st.session_state.gallery) - idx}",
                 data=buf.getvalue(),
-                file_name=f"wedding_photo_{idx}.jpg",
+                file_name=f"wedding_{idx}.jpg",
                 mime="image/jpeg",
-                key=f"btn_{idx}"
+                key=f"dl_{idx}"
             )
-else:
-    st.info("Belum ada foto di galeri. Silakan upload foto pertama!")
