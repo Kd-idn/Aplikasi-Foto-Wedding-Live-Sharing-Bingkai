@@ -73,4 +73,60 @@ with st.sidebar:
         if st.button("Logout", use_container_width=True): st.session_state.logged_in = False; st.rerun()
 
 # --- HEADER ---
-st.markdown(f'<h1 class="header-text">✨ Wedding Gallery of {st.session_state.wedding_name}</h1>', unsafe_
+st.markdown(f'<h1 class="header-text">✨ Wedding Gallery of {st.session_state.wedding_name}</h1>', unsafe_allow_html=True)
+st.markdown(f'<p class="header-text" style="font-style:italic; opacity:0.8; margin-top:-10px;">Powered by {st.session_state.vendor_name}</p>', unsafe_allow_html=True)
+
+if st.session_state.vendor_logo:
+    _, mid, _ = st.columns([1, 0.3, 1])
+    mid.image(st.session_state.vendor_logo, use_container_width=True)
+
+st.divider()
+
+# --- FUNGSI RENDER ---
+def render_gallery(suffix):
+    if not st.session_state.gallery:
+        st.info("Galeri belum berisi foto.")
+        return
+
+    c1, c2 = st.columns([3, 1])
+    with c1: sort_f = st.selectbox("Urutan Waktu:", ["Paling Baru", "Paling Lama"], key=f"srt_{suffix}")
+    with c2: mode = st.radio("Tampilan:", ["Grid", "List"], horizontal=True, key=f"vw_{suffix}")
+
+    data = [i for i in st.session_state.gallery if isinstance(i, dict)]
+    data.sort(key=lambda x: x.get('time', datetime.min), reverse=(sort_f == "Paling Baru"))
+
+    if mode == "Grid":
+        cols = st.columns(3)
+        for idx, item in enumerate(data):
+            with cols[idx % 3]:
+                st.image(item['image'], use_container_width=True)
+                t_str = item['time'].strftime('%H:%M') if 'time' in item else "--:--"
+                st.markdown(f"<p style='font-size:0.8rem; text-align:center; opacity:0.7;'>⏰ {t_str}</p>", unsafe_allow_html=True)
+                buf = io.BytesIO(); item['image'].save(buf, format="JPEG")
+                st.download_button("📥 Simpan", buf.getvalue(), f"img_{idx}.jpg", key=f"d_{suffix}_{idx}", use_container_width=True)
+    else:
+        for idx, item in enumerate(data):
+            st.image(item['image'], use_container_width=True)
+            t_str = item['time'].strftime('%H:%M') if 'time' in item else "--:--"
+            st.write(f"⏰ Jam Unggah: {t_str}")
+            buf = io.BytesIO(); item['image'].save(buf, format="JPEG")
+            st.download_button(f"📥 Simpan Foto {idx+1}", buf.getvalue(), f"img_{idx}.jpg", key=f"l_{suffix}_{idx}")
+            st.divider()
+
+# --- DASHBOARD ---
+if st.session_state.logged_in:
+    t1, t2 = st.tabs(["📤 Panel Fotografer", "👁️ Preview Tamu"])
+    with t1:
+        uploaded = st.file_uploader("Pilih foto", type=["jpg", "png"], label_visibility="collapsed")
+        if uploaded:
+            if st.session_state.frame is None: st.warning("Upload bingkai dulu!")
+            else:
+                img = ImageOps.exif_transpose(Image.open(uploaded)).convert("RGBA")
+                f_res = st.session_state.frame.resize(img.size, Image.Resampling.LANCZOS)
+                final = Image.alpha_composite(img, f_res).convert("RGB")
+                st.session_state.gallery.append({"image": final, "time": datetime.now()})
+                st.toast("Terkirim!")
+        render_gallery("admin")
+    with t2: render_gallery("pre")
+else:
+    render_gallery("gst")
