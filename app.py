@@ -2,7 +2,8 @@ import streamlit as st
 from PIL import Image, ImageOps
 import io
 
-st.set_page_config(page_title="Wedding Gallery", layout="wide")
+# Konfigurasi halaman agar sidebar bisa ditutup otomatis di HP
+st.set_page_config(page_title="Wedding Gallery", layout="wide", initial_sidebar_state="collapsed")
 
 # 1. Inisialisasi Data
 if 'gallery' not in st.session_state:
@@ -22,15 +23,15 @@ def check_login():
             st.session_state.logged_in = True
             st.rerun()
         else:
-            st.sidebar.error("Username atau Password salah!")
+            st.sidebar.error("Salah!")
 
 # --- LOGIKA TAMPILAN ---
 if not st.session_state.logged_in:
     st.title("✨ Wedding Live Gallery")
-    st.write("Selamat datang! Silakan unduh foto kenangan Anda di bawah ini.")
+    st.write("Selamat datang! Silakan unduh foto Anda di bawah ini.")
     check_login()
 else:
-    # 2. DASHBOARD ADMIN
+    # DASHBOARD ADMIN
     st.sidebar.title("🛠️ Admin Panel")
     if st.sidebar.button("🔓 Logout"):
         st.session_state.logged_in = False
@@ -38,42 +39,57 @@ else:
     
     st.title("📸 Dashboard Admin")
 
-    # --- BAGIAN PENGATURAN BINGKAI (SMART HIDE) ---
-    with st.sidebar.expander("🖼️ Pengaturan Bingkai", expanded=(st.session_state.frame is None)):
+    # PENGATURAN BINGKAI
+    with st.sidebar.expander("🖼️ Bingkai Aktif", expanded=(st.session_state.frame is None)):
         if st.session_state.frame is not None:
-            st.image(st.session_state.frame, caption="Bingkai Aktif", use_container_width=True)
-            if st.button("🗑️ Hapus / Ganti Bingkai"):
+            st.image(st.session_state.frame, use_container_width=True)
+            if st.button("🗑️ Ganti Bingkai"):
                 st.session_state.frame = None
                 st.rerun()
         else:
-            uploaded_frame = st.file_uploader("Upload Bingkai Baru (PNG)", type=["png"])
+            uploaded_frame = st.file_uploader("Upload PNG", type=["png"])
             if uploaded_frame:
                 st.session_state.frame = Image.open(uploaded_frame).convert("RGBA")
-                st.success("Bingkai Berhasil Disimpan!")
                 st.rerun()
 
-    # --- BAGIAN UPLOAD FOTO ---
-    st.write("### 📤 Upload Foto Hasil Jepretan")
-    if st.session_state.frame is None:
-        st.warning("⚠️ Silakan upload bingkai terlebih dahulu di sidebar!")
-    else:
-        uploaded_photo = st.file_uploader("Pilih foto dari folder laptop", type=["jpg", "jpeg", "png"])
+    # UPLOAD FOTO
+    if st.session_state.frame:
+        st.write("### 📤 Upload Foto Kamera")
+        uploaded_photo = st.file_uploader("Pilih file", type=["jpg", "jpeg", "png"], label_visibility="collapsed")
         if uploaded_photo:
-            with st.spinner("Memproses..."):
+            with st.spinner("Processing..."):
+                # Buka foto & perbaiki rotasi otomatis (EXIF)
                 user_img = ImageOps.exif_transpose(Image.open(uploaded_photo)).convert("RGBA")
                 frame_img = st.session_state.frame
+                
+                # FIT: Foto dipotong otomatis agar pas dengan ukuran bingkai tanpa dobel
                 user_img_resized = ImageOps.fit(user_img, frame_img.size, method=Image.Resampling.LANCZOS)
+                
+                # GABUNG: Tumpuk foto di bawah bingkai
                 final_image = Image.alpha_composite(user_img_resized, frame_img)
+                
+                # Simpan ke galeri (konversi ke RGB agar file lebih ringan)
                 st.session_state.gallery.insert(0, final_image.convert("RGB"))
-                st.success("Foto berhasil masuk galeri tamu!")
+                st.success("Foto ditambahkan!")
+    else:
+        st.warning("⚠️ Upload bingkai dulu di sidebar!")
 
-# --- GALERI (Tamu & Admin) ---
+# --- TAMPILAN GALERI (3 KOLOM RAPI) ---
 st.write("---")
 if st.session_state.gallery:
+    # Menggunakan Grid agar tidak ada gambar yang dobel/tumpang tindih
     cols = st.columns(3)
     for idx, photo in enumerate(st.session_state.gallery):
         with cols[idx % 3]:
             st.image(photo, use_container_width=True)
             buf = io.BytesIO()
             photo.save(buf, format="JPEG", quality=90)
-            st.download_button(label="📥 Download", data=buf.getvalue(), file_name=f"wedding_{idx}.jpg", mime="image/jpeg", key=f"dl_{idx}")
+            st.download_button(
+                label="📥 Download", 
+                data=buf.getvalue(), 
+                file_name=f"foto_{idx}.jpg", 
+                mime="image/jpeg", 
+                key=f"dl_{idx}"
+            )
+else:
+    st.info("Galeri kosong.")
