@@ -37,7 +37,6 @@ else:
     st.sidebar.divider()
     st.sidebar.subheader("✍️ Branding Acara")
     st.session_state.wedding_name = st.sidebar.text_input("Nama Pengantin", st.session_state.wedding_name)
-    st.sidebar.info("Gunakan format 'Nama Pria & Nama Wanita'")
     st.session_state.vendor_name = st.sidebar.text_input("Nama Vendor", st.session_state.vendor_name)
     
     new_logo = st.sidebar.file_uploader("Upload Logo Vendor (PNG)", type=["png"])
@@ -74,35 +73,38 @@ def render_gallery(is_preview=False):
     else:
         st.info("Galeri belum berisi foto.")
 
-# --- TAMPILAN HEADER SIMETRIS ---
+# --- HEADER & TOMBOL WA POJOK KANAN ATAS ---
 text_share = urllib.parse.quote(f"Lihat koleksi foto momen indah {st.session_state.wedding_name} di: {APP_URL}")
 wa_link = f"https://wa.me/?text={text_share}"
 
-# Header Terpusat (Centering)
-st.markdown(f"""
-    <div style="text-align: center; padding: 20px;">
-        <h1 style="color: #1E1E1E; margin-bottom: 0;">✨ Wedding Gallery of {st.session_state.wedding_name}</h1>
-        <p style="color: #666; font-style: italic; font-size: 1.1em; margin-top: 5px;">Powered by {st.session_state.vendor_name}</p>
-    </div>
-""", unsafe_allow_html=True)
+# Struktur Kolom Header
+h_col1, h_col2, h_col3 = st.columns([1, 4, 1])
 
-# Jika ada logo vendor, tampilkan di tengah
-if st.session_state.vendor_logo:
-    col_l1, col_l2, col_l3 = st.columns([1, 0.5, 1])
-    with col_l2:
-        st.image(st.session_state.vendor_logo, use_container_width=True)
+with h_col3: # Pojok Kanan Atas
+    st.markdown(f"""
+        <div style="text-align: right; padding-top: 10px;">
+            <a href="{wa_link}" target="_blank" style="text-decoration: none;">
+                <div style="background-color: #25D366; color: white; padding: 8px 15px; border-radius: 50px; display: inline-flex; align-items: center; gap: 8px; box-shadow: 0px 2px 5px rgba(0,0,0,0.1);">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg" width="18px">
+                    <span style="font-weight: bold; font-size: 13px;">Bagikan</span>
+                </div>
+            </a>
+        </div>
+    """, unsafe_allow_html=True)
 
-# Tombol Share WA Center & Floating-style
-st.markdown(f"""
-    <div style="display: flex; justify-content: center; margin-bottom: 30px;">
-        <a href="{wa_link}" target="_blank" style="text-decoration: none;">
-            <div style="background-color: #25D366; color: white; padding: 12px 25px; border-radius: 50px; display: flex; align-items: center; gap: 10px; box-shadow: 0px 4px 10px rgba(0,0,0,0.1); transition: 0.3s;">
-                <img src="https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg" width="25px">
-                <span style="font-weight: bold; font-size: 16px;">Bagikan Momen Ke WhatsApp</span>
-            </div>
-        </a>
-    </div>
-""", unsafe_allow_html=True)
+with h_col2: # Tengah (Simetris)
+    st.markdown(f"""
+        <div style="text-align: center;">
+            <h1 style="color: #1E1E1E; margin-bottom: 0;">✨ Wedding Gallery of {st.session_state.wedding_name}</h1>
+            <p style="color: #666; font-style: italic; margin-top: 5px;">Powered by {st.session_state.vendor_name}</p>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    if st.session_state.vendor_logo:
+        # Menampilkan logo tepat di tengah bawah nama vendor
+        col_logo1, col_logo2, col_logo3 = st.columns([1, 0.4, 1])
+        with col_logo2:
+            st.image(st.session_state.vendor_logo, use_container_width=True)
 
 # --- LOGIKA DASHBOARD ---
 st.divider()
@@ -125,4 +127,3 @@ if st.session_state.logged_in:
         render_gallery()
 else:
     render_gallery()
-    
