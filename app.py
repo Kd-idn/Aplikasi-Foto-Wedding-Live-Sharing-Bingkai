@@ -114,19 +114,43 @@ def render_gallery(suffix):
             st.divider()
 
 # --- DASHBOARD ---
-if st.session_state.logged_in:
-    t1, t2 = st.tabs(["📤 Panel Fotografer", "👁️ Preview Tamu"])
-    with t1:
-        uploaded = st.file_uploader("Pilih foto", type=["jpg", "png"], label_visibility="collapsed")
-        if uploaded:
-            if st.session_state.frame is None: st.warning("Upload bingkai dulu!")
+if uploaded:
+            if st.session_state.frame is None: 
+                st.warning("Upload bingkai dulu!")
             else:
-                img = ImageOps.exif_transpose(Image.open(uploaded)).convert("RGBA")
-                f_res = st.session_state.frame.resize(img.size, Image.Resampling.LANCZOS)
-                final = Image.alpha_composite(img, f_res).convert("RGB")
-                st.session_state.gallery.append({"image": final, "time": datetime.now()})
-                st.toast("Terkirim!")
-        render_gallery("admin")
-    with t2: render_gallery("pre")
-else:
-    render_gallery("gst")
+                with st.spinner("Menyesuaikan orientasi foto..."):
+                    # 1. Buka foto dan perbaiki rotasi otomatis (EXIF)
+                    img = ImageOps.exif_transpose(Image.open(uploaded)).convert("RGBA")
+                    
+                    # 2. Ambil ukuran bingkai (Potret/Story)
+                    frame = st.session_state.frame
+                    fw, fh = frame.size
+                    
+                    # 3. Proses 'Center Crop' foto lanskap agar mengikuti rasio bingkai
+                    # Menghitung rasio aspek
+                    img_ratio = img.width / img.height
+                    frame_ratio = fw / fh
+                    
+                    if img_ratio > frame_ratio:
+                        # Foto terlalu lebar (Lanskap), potong bagian samping
+                        new_width = int(frame_ratio * img.height)
+                        left = (img.width - new_width) / 2
+                        img = img.crop((left, 0, left + new_width, img.height))
+                    else:
+                        # Foto terlalu tinggi, potong bagian atas/bawah
+                        new_height = int(img.width / frame_ratio)
+                        top = (img.height - new_height) / 2
+                        img = img.crop((0, top, img.width, top + new_height))
+                    
+                    # 4. Resize foto yang sudah di-crop agar pas persis dengan bingkai
+                    img_resized = img.resize((fw, fh), Image.Resampling.LANCZOS)
+                    
+                    # 5. Tempelkan bingkai di atas foto
+                    final = Image.alpha_composite(img_resized, frame).convert("RGB")
+                    
+                    # 6. Simpan ke galeri
+                    st.session_state.gallery.append({
+                        "image": final, 
+                        "time": datetime.now()
+                    })
+                    st.toast("Foto otomatis disesuaikan ke format Story!", icon="📸")
