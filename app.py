@@ -73,6 +73,10 @@ with st.sidebar:
 
 # --- HEADER ---
 st.markdown(f'<h1 class="header-text">✨ Wedding Gallery of {st.session_state.wedding_name}</h1>', unsafe_allow_html=True)
+
+# Menampilkan kembali teks Powered by Vendor
+st.markdown(f'<p class="header-text" style="font-style:italic; opacity:0.8; margin-top:-10px;">Powered by {st.session_state.vendor_name}</p>', unsafe_allow_html=True)
+
 if st.session_state.vendor_logo:
     _, mid, _ = st.columns([1, 0.3, 1])
     mid.image(st.session_state.vendor_logo, use_container_width=True)
