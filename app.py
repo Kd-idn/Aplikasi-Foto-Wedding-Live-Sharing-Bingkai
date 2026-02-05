@@ -12,14 +12,12 @@ if 'frame' not in st.session_state:
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
 
-# --- FUNGSI LOGIN (Sederhana & Rapi) ---
+# --- FUNGSI LOGIN ---
 def check_login():
     st.sidebar.title("🔐 Admin Login")
     user = st.sidebar.text_input("Username", key="user_input")
     pwd = st.sidebar.text_input("Password", type="password", key="pwd_input")
-    
     if st.sidebar.button("Login"):
-        # Ganti dengan username & password pilihan Anda
         if user == "admin" and pwd == "wedding123":
             st.session_state.logged_in = True
             st.rerun()
@@ -28,38 +26,40 @@ def check_login():
 
 # --- LOGIKA TAMPILAN ---
 if not st.session_state.logged_in:
-    # 1. TAMPILAN TAMU (Hanya Galeri)
     st.title("✨ Wedding Live Gallery")
     st.write("Selamat datang! Silakan unduh foto kenangan Anda di bawah ini.")
-    
-    # Form login tetap ada di sidebar tapi tidak mengganggu
-    st.divider()
     check_login()
 else:
-    # 2. TAMPILAN ADMIN (Panel Kontrol Muncul)
+    # 2. DASHBOARD ADMIN
     st.sidebar.title("🛠️ Admin Panel")
     if st.sidebar.button("🔓 Logout"):
         st.session_state.logged_in = False
         st.rerun()
     
     st.title("📸 Dashboard Admin")
-    
-    # Upload Bingkai di Sidebar
-    st.sidebar.subheader("Pengaturan Bingkai")
-    uploaded_frame = st.sidebar.file_uploader("Upload Bingkai (PNG Transparan)", type=["png"])
-    if uploaded_frame:
-        st.session_state.frame = Image.open(uploaded_frame).convert("RGBA")
-        st.sidebar.success("Bingkai berhasil dipasang!")
 
-    # Upload Foto Manual
-    st.write("### 📤 Upload Foto Hasil Jepretan")
-    uploaded_photo = st.file_uploader("Pilih foto dari folder laptop", type=["jpg", "jpeg", "png"])
-    
-    if uploaded_photo:
-        if st.session_state.frame is None:
-            st.warning("Silakan upload bingkai terlebih dahulu di sidebar kiri!")
+    # --- BAGIAN PENGATURAN BINGKAI (SMART HIDE) ---
+    with st.sidebar.expander("🖼️ Pengaturan Bingkai", expanded=(st.session_state.frame is None)):
+        if st.session_state.frame is not None:
+            st.image(st.session_state.frame, caption="Bingkai Aktif", use_container_width=True)
+            if st.button("🗑️ Hapus / Ganti Bingkai"):
+                st.session_state.frame = None
+                st.rerun()
         else:
-            with st.spinner("Memasang bingkai secara otomatis..."):
+            uploaded_frame = st.file_uploader("Upload Bingkai Baru (PNG)", type=["png"])
+            if uploaded_frame:
+                st.session_state.frame = Image.open(uploaded_frame).convert("RGBA")
+                st.success("Bingkai Berhasil Disimpan!")
+                st.rerun()
+
+    # --- BAGIAN UPLOAD FOTO ---
+    st.write("### 📤 Upload Foto Hasil Jepretan")
+    if st.session_state.frame is None:
+        st.warning("⚠️ Silakan upload bingkai terlebih dahulu di sidebar!")
+    else:
+        uploaded_photo = st.file_uploader("Pilih foto dari folder laptop", type=["jpg", "jpeg", "png"])
+        if uploaded_photo:
+            with st.spinner("Memproses..."):
                 user_img = ImageOps.exif_transpose(Image.open(uploaded_photo)).convert("RGBA")
                 frame_img = st.session_state.frame
                 user_img_resized = ImageOps.fit(user_img, frame_img.size, method=Image.Resampling.LANCZOS)
@@ -67,22 +67,13 @@ else:
                 st.session_state.gallery.insert(0, final_image.convert("RGB"))
                 st.success("Foto berhasil masuk galeri tamu!")
 
-# --- GALERI (Muncul untuk Tamu & Admin) ---
+# --- GALERI (Tamu & Admin) ---
 st.write("---")
 if st.session_state.gallery:
-    st.subheader("🖼️ Galeri Foto")
     cols = st.columns(3)
     for idx, photo in enumerate(st.session_state.gallery):
         with cols[idx % 3]:
             st.image(photo, use_container_width=True)
             buf = io.BytesIO()
             photo.save(buf, format="JPEG", quality=90)
-            st.download_button(
-                label="📥 Download",
-                data=buf.getvalue(),
-                file_name=f"wedding_photo_{idx}.jpg",
-                mime="image/jpeg",
-                key=f"dl_{idx}"
-            )
-else:
-    st.info("Galeri kosong. Foto akan segera muncul setelah fotografer beraksi!")
+            st.download_button(label="📥 Download", data=buf.getvalue(), file_name=f"wedding_{idx}.jpg", mime="image/jpeg", key=f"dl_{idx}")
