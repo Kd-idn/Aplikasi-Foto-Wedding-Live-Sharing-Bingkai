@@ -2,7 +2,7 @@ import streamlit as st
 from PIL import Image, ImageOps
 import io
 
-# Konfigurasi halaman agar sidebar bisa ditutup otomatis di HP
+# Konfigurasi: Sidebar tertutup secara default agar galeri luas
 st.set_page_config(page_title="Wedding Gallery", layout="wide", initial_sidebar_state="collapsed")
 
 # 1. Inisialisasi Data
@@ -13,83 +13,63 @@ if 'frame' not in st.session_state:
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
 
-# --- FUNGSI LOGIN ---
-def check_login():
-    st.sidebar.title("🔐 Admin Login")
-    user = st.sidebar.text_input("Username", key="user_input")
-    pwd = st.sidebar.text_input("Password", type="password", key="pwd_input")
-    if st.sidebar.button("Login"):
+# --- AREA PUBLIK (BISA DIAKSES SIAPAPUN) ---
+st.title("✨ Wedding Live Gallery")
+
+# Bagian Upload: Terbuka untuk Fotografer (Tanpa Login)
+st.write("### 📤 Upload Foto Kamera")
+uploaded_photo = st.file_uploader("Seret foto ke sini untuk dipasang bingkai", type=["jpg", "jpeg", "png"], label_visibility="collapsed")
+
+if uploaded_photo:
+    if st.session_state.frame is None:
+        st.error("⚠️ Bingkai belum di-set oleh Admin! Silakan login di sidebar untuk upload bingkai.")
+    else:
+        with st.spinner("Memasang bingkai..."):
+            user_img = ImageOps.exif_transpose(Image.open(uploaded_photo)).convert("RGBA")
+            frame_img = st.session_state.frame
+            # Sesuaikan foto dengan ukuran asli bingkai agar tidak dobel/kecil
+            user_img_resized = ImageOps.fit(user_img, frame_img.size, method=Image.Resampling.LANCZOS)
+            final_image = Image.alpha_composite(user_img_resized, frame_img)
+            st.session_state.gallery.insert(0, final_image.convert("RGB"))
+            st.toast("Foto berhasil masuk galeri!", icon="✅")
+
+# --- AREA ADMIN (DI SIDEBAR) ---
+st.sidebar.title("🔐 Kendali Admin")
+if not st.session_state.logged_in:
+    # Form Login Sederhana
+    user = st.sidebar.text_input("Username")
+    pwd = st.sidebar.text_input("Password", type="password")
+    if st.sidebar.button("Masuk"):
         if user == "admin" and pwd == "wedding123":
             st.session_state.logged_in = True
             st.rerun()
-        else:
-            st.sidebar.error("Salah!")
-
-# --- LOGIKA TAMPILAN ---
-if not st.session_state.logged_in:
-    st.title("✨ Wedding Live Gallery")
-    st.write("Selamat datang! Silakan unduh foto Anda di bawah ini.")
-    check_login()
 else:
-    # DASHBOARD ADMIN
-    st.sidebar.title("🛠️ Admin Panel")
-    if st.sidebar.button("🔓 Logout"):
+    # Jika sudah login, Admin bisa ganti bingkai
+    st.sidebar.success("Mode Admin Aktif")
+    if st.sidebar.button("Logout"):
         st.session_state.logged_in = False
         st.rerun()
     
-    st.title("📸 Dashboard Admin")
-
-    # PENGATURAN BINGKAI
-    with st.sidebar.expander("🖼️ Bingkai Aktif", expanded=(st.session_state.frame is None)):
-        if st.session_state.frame is not None:
-            st.image(st.session_state.frame, use_container_width=True)
-            if st.button("🗑️ Ganti Bingkai"):
-                st.session_state.frame = None
-                st.rerun()
-        else:
-            uploaded_frame = st.file_uploader("Upload PNG", type=["png"])
-            if uploaded_frame:
-                st.session_state.frame = Image.open(uploaded_frame).convert("RGBA")
-                st.rerun()
-
-    # UPLOAD FOTO
-    if st.session_state.frame:
-        st.write("### 📤 Upload Foto Kamera")
-        uploaded_photo = st.file_uploader("Pilih file", type=["jpg", "jpeg", "png"], label_visibility="collapsed")
-        if uploaded_photo:
-            with st.spinner("Processing..."):
-                # Buka foto & perbaiki rotasi otomatis (EXIF)
-                user_img = ImageOps.exif_transpose(Image.open(uploaded_photo)).convert("RGBA")
-                frame_img = st.session_state.frame
-                
-                # FIT: Foto dipotong otomatis agar pas dengan ukuran bingkai tanpa dobel
-                user_img_resized = ImageOps.fit(user_img, frame_img.size, method=Image.Resampling.LANCZOS)
-                
-                # GABUNG: Tumpuk foto di bawah bingkai
-                final_image = Image.alpha_composite(user_img_resized, frame_img)
-                
-                # Simpan ke galeri (konversi ke RGB agar file lebih ringan)
-                st.session_state.gallery.insert(0, final_image.convert("RGB"))
-                st.success("Foto ditambahkan!")
+    st.sidebar.divider()
+    st.sidebar.subheader("Pengaturan Bingkai")
+    if st.session_state.frame is not None:
+        st.sidebar.image(st.session_state.frame, caption="Bingkai saat ini", use_container_width=True)
+        if st.sidebar.button("🗑️ Ganti Bingkai"):
+            st.session_state.frame = None
+            st.rerun()
     else:
-        st.warning("⚠️ Upload bingkai dulu di sidebar!")
+        new_frame = st.sidebar.file_uploader("Upload Bingkai PNG", type=["png"])
+        if new_frame:
+            st.session_state.frame = Image.open(new_frame).convert("RGBA")
+            st.rerun()
 
-# --- TAMPILAN GALERI (3 KOLOM RAPI) ---
+# --- TAMPILAN GALERI (GRID 3 KOLOM) ---
 st.write("---")
 if st.session_state.gallery:
-    # Menggunakan Grid agar tidak ada gambar yang dobel/tumpang tindih
     cols = st.columns(3)
     for idx, photo in enumerate(st.session_state.gallery):
         with cols[idx % 3]:
             st.image(photo, use_container_width=True)
             buf = io.BytesIO()
             photo.save(buf, format="JPEG", quality=90)
-            st.download_button(
-                label="📥 Download", 
-                data=buf.getvalue(), 
-                file_name=f"foto_{idx}.jpg", 
-                mime="image/jpeg", 
-                key=f"dl_{idx}"
-            )
-else:
-    st.info("Galeri kosong.")
+            st.download_button(label="📥 Simpan", data=buf.getvalue(), file_name=f"wedding_{idx}.jpg", mime="image/jpeg", key=f"dl_{idx}")
