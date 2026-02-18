@@ -1,14 +1,16 @@
 import streamlit as st
 from PIL import Image, ImageOps
 import io
-import urllib.parse
 from datetime import datetime
 import time
+from googleapiclient.discovery import build
+from google.oauth2 import service_account
+from googleapiclient.http import MediaIoBaseUpload
 
 # 1. Konfigurasi Dasar
 st.set_page_config(page_title="Wedding Gallery Live", layout="wide", initial_sidebar_state="collapsed")
 
-# 2. Inisialisasi Session State yang Kokoh
+# 2. Inisialisasi Session State
 if 'gallery' not in st.session_state: st.session_state.gallery = []
 if 'frame' not in st.session_state: st.session_state.frame = None
 if 'vendor_logo' not in st.session_state: st.session_state.vendor_logo = None
@@ -17,6 +19,27 @@ if 'wedding_name' not in st.session_state: st.session_state.wedding_name = "Si A
 if 'vendor_name' not in st.session_state: st.session_state.vendor_name = "Nama Vendor Anda"
 if 'last_processed_file' not in st.session_state: st.session_state.last_processed_file = None
 
+# --- FUNGSI GOOGLE DRIVE ---
+def upload_to_drive(img_bytes, filename):
+    try:
+        # Mengambil kredensial dari Streamlit Secrets
+        info = st.secrets["gcp_service_account"]
+        creds = service_account.Credentials.from_service_account_info(info)
+        service = build('drive', 'v3', credentials=creds)
+        
+        file_metadata = {
+            'name': filename,
+            # GANTI kode di bawah ini dengan ID Folder dari URL browser Anda
+            'parents': ['1dImEY0-jGA8h4mIXVnkiqrhmdKG57FgV'] 
+        }
+        
+        media = MediaIoBaseUpload(io.BytesIO(img_bytes), mimetype='image/jpeg')
+        file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
+        return file.get('id')
+    except Exception as e:
+        st.error(f"Gagal upload ke Drive: {e}")
+        return None
+
 def reset_all_data():
     st.session_state.gallery = []
     st.session_state.frame = None
@@ -24,7 +47,7 @@ def reset_all_data():
     st.session_state.last_processed_file = None
     st.rerun()
 
-# --- CSS ADAPTIF (Mencegah Teks Gelap di HP) ---
+# --- CSS ADAPTIF ---
 st.markdown("""
     <style>
     .stApp h1, .stApp p, .stApp label, .stApp div { color: var(--text-color) !important; }
@@ -32,7 +55,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- SIDEBAR: KENDALI ADMIN (Dipastikan Tombol Muncul) ---
+# --- SIDEBAR: KENDALI ADMIN ---
 with st.sidebar:
     st.title("🔐 Kendali Admin")
     if not st.session_state.logged_in:
@@ -42,28 +65,21 @@ with st.sidebar:
             if u == "admin" and p == "wedding123":
                 st.session_state.logged_in = True; st.rerun()
     else:
-        # Branding Acara
-        st.session_state.wedding_name = st.text_input("Nama Pengantin", st.session_state.wedding_name, key="input_pengantin")
-        st.session_state.vendor_name = st.text_input("Nama Vendor", st.session_state.vendor_name, key="input_vendor")
-        
+        st.session_state.wedding_name = st.text_input("Nama Pengantin", st.session_state.wedding_name)
+        st.session_state.vendor_name = st.text_input("Nama Vendor", st.session_state.vendor_name)
         st.divider()
-        # Pengaturan Media
-        l_up = st.file_uploader("Upload Logo Vendor", type=["png"], key="up_logo_sidebar")
+        l_up = st.file_uploader("Upload Logo Vendor", type=["png"])
         if l_up: st.session_state.vendor_logo = Image.open(l_up).convert("RGBA")
-        
-        f_up = st.file_uploader("Upload Bingkai Story", type=["png"], key="up_frame_sidebar")
+        f_up = st.file_uploader("Upload Bingkai Story", type=["png"])
         if f_up: st.session_state.frame = Image.open(f_up).convert("RGBA")
         
         if st.session_state.frame:
             st.image(st.session_state.frame, caption="Bingkai Aktif", width=80)
-            if st.button("🗑️ Hapus Bingkai", key="btn_del_frame"): st.session_state.frame = None; st.rerun()
+            if st.button("🗑️ Hapus Bingkai"): st.session_state.frame = None; st.rerun()
         
         st.divider()
-        # Tombol Reset & Logout
-        if st.button("🚨 RESET TOTAL", type="primary", use_container_width=True, key="main_reset_btn"):
-            reset_all_data()
-        if st.button("Logout", use_container_width=True, key="main_logout_btn"):
-            st.session_state.logged_in = False; st.rerun()
+        if st.button("🚨 RESET TOTAL", type="primary", use_container_width=True): reset_all_data()
+        if st.button("Logout", use_container_width=True): st.session_state.logged_in = False; st.rerun()
 
 # --- HEADER ---
 st.markdown(f'<h1 class="header-text">✨ Wedding Gallery of {st.session_state.wedding_name}</h1>', unsafe_allow_html=True)
@@ -75,13 +91,12 @@ if st.session_state.vendor_logo:
 
 st.divider()
 
-# --- FUNGSI RENDER GALERI (Memperbaiki KeyError & Duplicate Key) ---
+# --- FUNGSI RENDER GALERI ---
 def render_gallery_content(suffix):
     if not st.session_state.gallery:
         st.info("Galeri belum berisi foto.")
         return
 
-    # Pastikan data berupa dictionary dan urutkan
     valid_data = [i for i in st.session_state.gallery if isinstance(i, dict)]
     valid_data.sort(key=lambda x: x.get('time', datetime.min), reverse=True)
 
@@ -91,9 +106,6 @@ def render_gallery_content(suffix):
             st.image(item['image'], use_container_width=True)
             t_str = item['time'].strftime('%H:%M')
             st.caption(f"⏰ {t_str}")
-            
-            # Tombol Simpan dengan Key unik berbasis timestamp
-            # Memastikan 'image_bytes' ada untuk menghindari KeyError
             if 'image_bytes' in item:
                 st.download_button(
                     label="📥 Simpan",
@@ -103,23 +115,22 @@ def render_gallery_content(suffix):
                     use_container_width=True
                 )
 
-# --- DASHBOARD UTAMA (Anti-Double Upload) ---
+# --- DASHBOARD UTAMA ---
 if st.session_state.logged_in:
     t1, t2 = st.tabs(["📤 Panel Fotografer", "👁️ Preview Tampilan Tamu"])
     with t1:
         st.subheader("Kirim Hasil Foto")
         uploaded = st.file_uploader("Drag and drop file here", type=["jpg", "png", "jpeg"], key="main_uploader")
         
-        # Logika Mencegah File Double
         if uploaded and uploaded.name != st.session_state.last_processed_file:
             if st.session_state.frame is None:
                 st.warning("Silakan upload bingkai potret terlebih dahulu di sidebar!")
             else:
-                with st.spinner("Menyesuaikan ke format Story IG..."):
+                with st.spinner("Proses Bingkai & Sinkronisasi Drive..."):
                     img = ImageOps.exif_transpose(Image.open(uploaded)).convert("RGBA")
                     fw, fh = st.session_state.frame.size
                     
-                    # Smart Center-Crop (Lanskap ke Story Potret)
+                    # Smart Center-Crop
                     img_ratio, frame_ratio = img.width / img.height, fw / fh
                     if img_ratio > frame_ratio:
                         new_w = int(frame_ratio * img.height)
@@ -130,26 +141,29 @@ if st.session_state.logged_in:
                         top = (img.height - new_h) / 2
                         img = img.crop((0, top, img.width, top + new_h))
                     
-                    # Gabungkan Foto dan Bingkai
                     final_img = Image.alpha_composite(img.resize((fw, fh)), st.session_state.frame).convert("RGB")
                     
-                    # Konversi ke bytes untuk download stabil
+                    # Konversi ke bytes
                     img_byte_arr = io.BytesIO()
-                    final_img.save(img_byte_arr, format='JPEG')
+                    final_img.save(img_byte_arr, format='JPEG', quality=95)
+                    img_data = img_byte_arr.getvalue()
                     
-                    # Simpan ke state
+                    # --- UPLOAD KE DRIVE ---
+                    file_name_drive = f"wedding_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
+                    drive_id = upload_to_drive(img_data, file_name_drive)
+                    
+                    # Simpan ke state galeri lokal
                     st.session_state.gallery.append({
                         "image": final_img,
-                        "image_bytes": img_byte_arr.getvalue(),
-                        "time": datetime.now()
+                        "image_bytes": img_data,
+                        "time": datetime.now(),
+                        "drive_id": drive_id
                     })
                     st.session_state.last_processed_file = uploaded.name
-                    st.toast("Foto Terkirim!", icon="📸")
-                    time.sleep(1) # Jeda singkat untuk kestabilan state
+                    st.toast("Tersimpan di Galeri & Drive!", icon="☁️")
+                    time.sleep(1)
                     st.rerun()
-
-        render_gallery_content("admin")
     with t2:
-        render_gallery_content("preview")
+        render_gallery_content("admin")
 else:
-    render_gallery_content("guest")
+    render_gallery_content("public")
