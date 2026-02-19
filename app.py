@@ -66,8 +66,26 @@ if 'credentials' in st.session_state:
             media = MediaIoBaseUpload(uploaded_file, mimetype=uploaded_file.type)
             
             file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
-            st.success(f"Berhasil! Foto tersimpan dengan ID: {file.get('id')}")
-        except Exception as e:
-            st.error(f"Gagal upload: {e}")
-else:
-    st.info("Silakan login melalui sidebar untuk mengunggah foto.")
+           FOLDER_ID = "1dImEY0-jGA8h4mIXVnkiqrhmdKG57FgV"
+
+if uploaded_file and st.button("Simpan ke Drive"):
+    try:
+        service = build('drive', 'v3', credentials=st.session_state.credentials)
+        
+        # Tambahkan 'parents' agar file masuk ke folder spesifik
+        file_metadata = {
+            'name': uploaded_file.name,
+            'parents': [FOLDER_ID] 
+        }
+        
+        media = MediaIoBaseUpload(uploaded_file, mimetype=uploaded_file.type)
+        
+        file = service.files().create(
+            body=file_metadata, 
+            media_body=media, 
+            fields='id'
+        ).execute()
+        
+        st.success(f"Berhasil! Foto tersimpan di folder 'wedding'")
+    except Exception as e:
+        st.error(f"Gagal upload: {e}")
