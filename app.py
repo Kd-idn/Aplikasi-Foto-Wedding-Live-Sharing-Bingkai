@@ -4,15 +4,16 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 import io
 
-# Konfigurasi Halaman
+# --- KONFIGURASI UTAMA ---
 st.set_page_config(page_title="Wedding Gallery", layout="wide")
+
+# ID Folder Drive yang Anda berikan
+FOLDER_ID = "1dImEY0-jGA8h4mIXVnkiqrhmdKG57FgV"
 
 # Ambil data dari Secrets
 CLIENT_ID = st.secrets["google_oauth"]["client_id"]
 CLIENT_SECRET = st.secrets["google_oauth"]["client_secret"]
 REDIRECT_URI = st.secrets["google_oauth"]["redirect_uri"]
-
-# Scopes yang dibutuhkan
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
 
 def get_flow():
@@ -22,70 +23,65 @@ def get_flow():
             "client_secret": CLIENT_SECRET,
             "auth_uri": "https://accounts.google.com/o/oauth2/auth",
             "token_uri": "https://oauth2.googleapis.com/token",
-            "redirect_uris": [REDIRECT_URI]
         }},
         scopes=SCOPES,
         redirect_uri=REDIRECT_URI
     )
 
-# --- UI UTAMA ---
-st.title("✨ Wedding Gallery of Si A & Si B")
+# --- UI APLIKASI ---
+st.title("✨ Wedding Gallery Live Sharing")
 
-# Sidebar untuk Admin
+# Sidebar untuk Login
 with st.sidebar:
     st.header("🔐 Kendali Admin")
     if 'credentials' not in st.session_state:
-        # Tombol Login Google
         flow = get_flow()
         auth_url, _ = flow.authorization_url(prompt='consent')
         st.link_button("🔑 Login with Google Drive", auth_url)
         
-        # Cek jika kembali dari login
-        code = st.query_params.get("code")
-        if code:
-            flow.fetch_token(code=code)
-            st.session_state.credentials = flow.credentials
-            st.rerun()
+        # Tangkap kode akses setelah login
+        auth_code = st.query_params.get("code")
+        if auth_code:
+            try:
+                flow.fetch_token(code=auth_code)
+                st.session_state.credentials = flow.credentials
+                st.success("Login Berhasil!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Gagal memproses login: {e}")
     else:
-        st.success("✅ Terhubung ke Drive Anda")
+        st.success("✅ Terhubung ke Google Drive")
         if st.button("Logout"):
             del st.session_state.credentials
             st.rerun()
 
-# --- BAGIAN UPLOAD (Hanya muncul jika sudah login) ---
+# --- BAGIAN UPLOAD ---
 if 'credentials' in st.session_state:
     st.divider()
-    st.subheader("📸 Unggah Foto Baru")
-    uploaded_file = st.file_uploader("Pilih foto (JPG/PNG)", type=['jpg', 'jpeg', 'png'])
+    st.subheader("📸 Unggah Foto ke Folder Wedding")
+    uploaded_file = st.file_uploader("Pilih foto", type=['jpg', 'jpeg', 'png'])
     
-    if uploaded_file and st.button("Simpan ke Drive"):
+    if uploaded_file and st.button("Upload Sekarang"):
         try:
             service = build('drive', 'v3', credentials=st.session_state.credentials)
             
-            file_metadata = {'name': uploaded_file.name}
+            file_metadata = {
+                'name': uploaded_file.name,
+                'parents': [FOLDER_ID]
+            }
+            
             media = MediaIoBaseUpload(uploaded_file, mimetype=uploaded_file.type)
             
-            file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
-           FOLDER_ID = "1dImEY0-jGA8h4mIXVnkiqrhmdKG57FgV"
-
-if uploaded_file and st.button("Simpan ke Drive"):
-    try:
-        service = build('drive', 'v3', credentials=st.session_state.credentials)
-        
-        # Tambahkan 'parents' agar file masuk ke folder spesifik
-        file_metadata = {
-            'name': uploaded_file.name,
-            'parents': [FOLDER_ID] 
-        }
-        
-        media = MediaIoBaseUpload(uploaded_file, mimetype=uploaded_file.type)
-        
-        file = service.files().create(
-            body=file_metadata, 
-            media_body=media, 
-            fields='id'
-        ).execute()
-        
-        st.success(f"Berhasil! Foto tersimpan di folder 'wedding'")
-    except Exception as e:
-        st.error(f"Gagal upload: {e}")
+            file = service.files().create(
+                body=file_metadata, 
+                media_body=media, 
+                fields='id'
+            ).execute()
+            
+            st.balloons()
+            st.success(f"Foto berhasil diunggah! (ID: {file.get('id')})")
+        except Exception as e:
+            st.error(f"Terjadi kesalahan saat upload: {e}")
+else:
+    st.info("Silakan klik 'Login with Google Drive' di sidebar untuk mulai mengunggah foto.")
+    
