@@ -81,7 +81,7 @@ with st.sidebar:
 if choice == "📸 Kamera & Unggah":
     st.subheader("📸 Ambil Foto Momen Bahagia")
     # Fitur Kamera Langsung
-    img_file = st.camera_input("Ambil foto sekarang")
+   img_file = st.file_uploader("Pilih foto dari galeri", type=["jpg", "png", "jpeg"])
     
     # Jika tidak pakai kamera, bisa upload file
     if not img_file:
